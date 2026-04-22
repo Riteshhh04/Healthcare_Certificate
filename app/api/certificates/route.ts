@@ -42,11 +42,29 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { patientId, certificateType, issuedBy, issueDate, expiryDate, description } = body
+    const { 
+      patientId, 
+      certificateType, 
+      issuedBy, 
+      issueDate, 
+      expiryDate, 
+      description,
+      walletAddress,
+      walletSignature,
+      walletTransactionHash,
+    } = body
 
     if (!patientId || !certificateType || !issuedBy || !issueDate || !description) {
       return NextResponse.json(
         { error: 'Missing required fields' },
+        { status: 400 }
+      )
+    }
+
+    // Require wallet signature for certificate issuance
+    if (!walletSignature || !walletAddress) {
+      return NextResponse.json(
+        { error: 'MetaMask wallet signature is required to issue certificates' },
         { status: 400 }
       )
     }
@@ -79,7 +97,7 @@ export async function POST(request: NextRequest) {
       expiryDate: expiryDate ? new Date(expiryDate) : undefined,
       description,
       blockchainHash: blockchainResult.hash,
-      transactionId: blockchainResult.transactionId,
+      transactionId: walletTransactionHash || blockchainResult.transactionId,
       status: 'verified',
       createdAt: new Date(),
     }
@@ -89,7 +107,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       message: 'Certificate created and stored on blockchain',
       certificate,
-      blockchain: blockchainResult,
+      blockchain: {
+        ...blockchainResult,
+        walletAddress,
+        walletTransactionHash,
+      },
     })
   } catch {
     return NextResponse.json(

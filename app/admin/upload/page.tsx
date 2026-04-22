@@ -7,7 +7,9 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Upload, CheckCircle, AlertCircle, Loader2, Link as LinkIcon } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Upload, CheckCircle, AlertCircle, Loader2, Link as LinkIcon, Wallet, ExternalLink } from 'lucide-react'
+import { useMetaMask } from '@/lib/useMetaMask'
 
 interface User {
   id: string
@@ -33,8 +35,20 @@ export default function AdminUploadPage() {
   const [users, setUsers] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [success, setSuccess] = useState<{ message: string; hash: string } | null>(null)
+  const [success, setSuccess] = useState<{ message: string; hash: string; txHash?: string } | null>(null)
   const [error, setError] = useState('')
+  const [step, setStep] = useState<'form' | 'wallet' | 'signing' | 'storing'>('form')
+
+  const {
+    isInstalled,
+    isConnected,
+    account,
+    isConnecting,
+    error: walletError,
+    connect,
+    signTransaction,
+    clearError,
+  } = useMetaMask()
 
   const [formData, setFormData] = useState({
     patientId: '',
@@ -61,30 +75,89 @@ export default function AdminUploadPage() {
     fetchUsers()
   }, [])
 
+  // Clear wallet error after 5 seconds
+  useEffect(() => {
+    if (walletError) {
+      const timer = setTimeout(clearError, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [walletError, clearError])
+
+  const handleConnectWallet = async () => {
+    const connected = await connect()
+    if (connected) {
+      setError('')
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setSuccess(null)
+
+    // Validate form
+    if (!formData.patientId || !formData.certificateType || !formData.issuedBy || !formData.issueDate || !formData.description) {
+      setError('Please fill in all required fields')
+      return
+    }
+
+    // Check if wallet is connected
+    if (!isConnected) {
+      setStep('wallet')
+      setError('Please connect your MetaMask wallet to sign the transaction')
+      return
+    }
+
     setIsSubmitting(true)
+    setStep('signing')
 
     try {
+      // Generate a temporary certificate ID for signing
+      const tempCertId = `cert-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+
+      // Request MetaMask signature
+      const signResult = await signTransaction({
+        certificateId: tempCertId,
+        patientId: formData.patientId,
+        certificateType: formData.certificateType,
+        issuedBy: formData.issuedBy,
+        issueDate: formData.issueDate,
+      })
+
+      if (!signResult) {
+        setStep('form')
+        setError('Transaction was rejected or failed. Please try again.')
+        setIsSubmitting(false)
+        return
+      }
+
+      setStep('storing')
+
+      // Send to backend with the signature
       const res = await fetch('/api/certificates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          walletAddress: account,
+          walletSignature: signResult.signature,
+          walletTransactionHash: signResult.transactionHash,
+        }),
       })
 
       const data = await res.json()
 
       if (!res.ok) {
         setError(data.error || 'Failed to create certificate')
+        setStep('form')
         return
       }
 
       setSuccess({
         message: 'Certificate created and stored on blockchain successfully!',
         hash: data.blockchain.hash,
+        txHash: signResult.transactionHash,
       })
 
       // Reset form
@@ -96,10 +169,25 @@ export default function AdminUploadPage() {
         expiryDate: '',
         description: '',
       })
+      setStep('form')
     } catch {
       setError('Failed to create certificate. Please try again.')
+      setStep('form')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const getStepMessage = () => {
+    switch (step) {
+      case 'wallet':
+        return 'Please connect your MetaMask wallet'
+      case 'signing':
+        return 'Please confirm the transaction in MetaMask...'
+      case 'storing':
+        return 'Storing certificate on blockchain...'
+      default:
+        return ''
     }
   }
 
@@ -113,6 +201,84 @@ export default function AdminUploadPage() {
       </div>
 
       <div className="max-w-2xl">
+        {/* Wallet Connection Card */}
+        <Card className="mb-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-primary" />
+              MetaMask Wallet
+            </CardTitle>
+            <CardDescription>
+              Connect your MetaMask wallet to sign and verify certificate transactions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!isInstalled ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  MetaMask is not installed.{' '}
+                  <a 
+                    href="https://metamask.io/download/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="underline font-medium"
+                  >
+                    Install MetaMask
+                  </a>
+                  {' '}to enable blockchain transactions.
+                </AlertDescription>
+              </Alert>
+            ) : isConnected ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 bg-success rounded-full animate-pulse" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Connected</p>
+                    <p className="text-xs font-mono text-muted-foreground">
+                      {account?.slice(0, 6)}...{account?.slice(-4)}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-success border-success">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Ready
+                </Badge>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Connect your wallet to issue certificates
+                </p>
+                <Button 
+                  onClick={handleConnectWallet} 
+                  disabled={isConnecting}
+                  variant="outline"
+                >
+                  {isConnecting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <Wallet className="h-4 w-4 mr-2" />
+                      Connect Wallet
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+            {walletError && (
+              <Alert variant="destructive" className="mt-3">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{walletError}</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Certificate Form Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -121,7 +287,7 @@ export default function AdminUploadPage() {
             </CardTitle>
             <CardDescription>
               Fill in the details below to issue a new health certificate. The certificate will be
-              stored on the Ethereum blockchain for verification.
+              signed with your MetaMask wallet and stored on the blockchain.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -130,9 +296,16 @@ export default function AdminUploadPage() {
                 <CheckCircle className="h-4 w-4 text-success" />
                 <AlertDescription className="text-success">
                   <p className="font-medium">{success.message}</p>
-                  <p className="text-sm mt-1 font-mono break-all">
-                    Hash: {success.hash}
-                  </p>
+                  <div className="mt-2 space-y-1">
+                    <p className="text-sm font-mono break-all">
+                      <span className="text-muted-foreground">Blockchain Hash:</span> {success.hash}
+                    </p>
+                    {success.txHash && (
+                      <p className="text-sm font-mono break-all">
+                        <span className="text-muted-foreground">Wallet TX:</span> {success.txHash.slice(0, 20)}...
+                      </p>
+                    )}
+                  </div>
                 </AlertDescription>
               </Alert>
             )}
@@ -144,6 +317,15 @@ export default function AdminUploadPage() {
               </Alert>
             )}
 
+            {step !== 'form' && isSubmitting && (
+              <Alert className="mb-6 border-primary bg-primary/10">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <AlertDescription className="text-primary font-medium">
+                  {getStepMessage()}
+                </AlertDescription>
+              </Alert>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">
@@ -152,7 +334,7 @@ export default function AdminUploadPage() {
                 <Select
                   value={formData.patientId}
                   onValueChange={(value) => setFormData({ ...formData, patientId: value })}
-                  required
+                  disabled={isSubmitting}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a patient" />
@@ -180,7 +362,7 @@ export default function AdminUploadPage() {
                 <Select
                   value={formData.certificateType}
                   onValueChange={(value) => setFormData({ ...formData, certificateType: value })}
-                  required
+                  disabled={isSubmitting}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select certificate type" />
@@ -203,7 +385,7 @@ export default function AdminUploadPage() {
                   placeholder="Hospital or clinic name"
                   value={formData.issuedBy}
                   onChange={(e) => setFormData({ ...formData, issuedBy: e.target.value })}
-                  required
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -216,7 +398,7 @@ export default function AdminUploadPage() {
                     type="date"
                     value={formData.issueDate}
                     onChange={(e) => setFormData({ ...formData, issueDate: e.target.value })}
-                    required
+                    disabled={isSubmitting}
                   />
                 </div>
                 <div className="space-y-2">
@@ -227,6 +409,7 @@ export default function AdminUploadPage() {
                     type="date"
                     value={formData.expiryDate}
                     onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>
@@ -240,7 +423,7 @@ export default function AdminUploadPage() {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={4}
-                  required
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -248,20 +431,29 @@ export default function AdminUploadPage() {
                 <div className="flex items-start gap-3">
                   <LinkIcon className="h-5 w-5 text-primary mt-0.5" />
                   <div>
-                    <p className="font-medium text-foreground text-sm">Blockchain Storage</p>
+                    <p className="font-medium text-foreground text-sm">Blockchain Storage with MetaMask</p>
                     <p className="text-sm text-muted-foreground">
-                      This certificate will be hashed and stored on the Ethereum blockchain (Hardhat
-                      localhost). The unique hash can be used for verification.
+                      This certificate will be signed with your MetaMask wallet and stored on the blockchain.
+                      You will need to confirm the transaction in MetaMask before the certificate is issued.
                     </p>
                   </div>
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isSubmitting || !isConnected}
+              >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Storing on Blockchain...
+                    {step === 'signing' ? 'Waiting for MetaMask...' : 'Storing on Blockchain...'}
+                  </>
+                ) : !isConnected ? (
+                  <>
+                    <Wallet className="h-4 w-4 mr-2" />
+                    Connect Wallet to Issue
                   </>
                 ) : (
                   <>
@@ -270,7 +462,32 @@ export default function AdminUploadPage() {
                   </>
                 )}
               </Button>
+
+              {!isConnected && isInstalled && (
+                <p className="text-xs text-center text-muted-foreground">
+                  Please connect your MetaMask wallet above to issue certificates
+                </p>
+              )}
             </form>
+          </CardContent>
+        </Card>
+
+        {/* Info Card */}
+        <Card className="mt-6 border-primary/20">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <ExternalLink className="h-5 w-5 text-primary mt-0.5" />
+              <div>
+                <p className="font-medium text-foreground text-sm">How it works</p>
+                <ol className="text-sm text-muted-foreground mt-2 space-y-1 list-decimal list-inside">
+                  <li>Fill in the certificate details</li>
+                  <li>Click &quot;Issue Certificate&quot;</li>
+                  <li>MetaMask will open asking you to sign the transaction</li>
+                  <li>Review and confirm the transaction in MetaMask</li>
+                  <li>Certificate is stored on the blockchain after confirmation</li>
+                </ol>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
