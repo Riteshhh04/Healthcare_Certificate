@@ -1,0 +1,399 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "certificateHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "CertificateRevoked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "certificateHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "certificateId",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "patientId",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "certificateType",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "issuedBy",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "issueDate",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "CertificateStored",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "issuer",
+        "type": "address"
+      }
+    ],
+    "name": "IssuerAuthorized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "issuer",
+        "type": "address"
+      }
+    ],
+    "name": "IssuerRevoked",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_issuer",
+        "type": "address"
+      }
+    ],
+    "name": "authorizeIssuer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "authorizedIssuers",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_certificateId",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_patientId",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_certificateType",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_issuedBy",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_issueDate",
+        "type": "uint256"
+      }
+    ],
+    "name": "generateCertificateHash",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_certificateHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getCertificate",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "certificateId",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "patientId",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "certificateType",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "issuedBy",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "issueDate",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "exists",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "revoked",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_patientId",
+        "type": "string"
+      }
+    ],
+    "name": "getPatientCertificates",
+    "outputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "",
+        "type": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getTotalCertificates",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
+      }
+    ],
+    "name": "isAuthorizedIssuer",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_certificateHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "revokeCertificate",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_issuer",
+        "type": "address"
+      }
+    ],
+    "name": "revokeIssuer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_certificateId",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_patientId",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_certificateType",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_issuedBy",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_issueDate",
+        "type": "uint256"
+      }
+    ],
+    "name": "storeCertificate",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "certificateHash",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_certificateHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "verifyCertificate",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "isValid",
+        "type": "bool"
+      },
+      {
+        "internalType": "string",
+        "name": "certificateType",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "issuedBy",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "issueDate",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "revoked",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
