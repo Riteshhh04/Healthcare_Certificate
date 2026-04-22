@@ -1,7 +1,7 @@
 import { PDFDocument } from 'pdf-lib'
 import { parseVerificationSignature, generateCertificateContentHash, generateVerificationSignature } from './pdf-generator'
 import { Certificate } from './types'
-import { certificateStore } from './store'
+import { certificateStore } from './db'
 
 export interface PDFVerificationResult {
   isValid: boolean
