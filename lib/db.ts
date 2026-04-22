@@ -184,7 +184,19 @@ export const certificateStore = {
   },
 
   getByHash: (hash: string): Certificate | undefined => {
-    const row = db.prepare('SELECT * FROM certificates WHERE blockchainHash = ?').get(hash) as Record<string, unknown> | undefined
+    // First try exact match
+    let row = db.prepare('SELECT * FROM certificates WHERE blockchainHash = ?').get(hash) as Record<string, unknown> | undefined
+    
+    // If not found, try case-insensitive match
+    if (!row) {
+      row = db.prepare('SELECT * FROM certificates WHERE LOWER(blockchainHash) = LOWER(?)').get(hash) as Record<string, unknown> | undefined
+    }
+    
+    // If still not found, try partial match (LIKE query for hashes that might be truncated)
+    if (!row && hash.length > 5) {
+      row = db.prepare('SELECT * FROM certificates WHERE blockchainHash LIKE ?').get(`%${hash}%`) as Record<string, unknown> | undefined
+    }
+    
     return row ? rowToCertificate(row) : undefined
   },
 

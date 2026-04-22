@@ -123,12 +123,19 @@ function VerifyPageContent() {
     setIsHashVerifying(true)
 
     try {
+      // Determine if input is a certificate ID or blockchain hash
+      const isCertificateId = trimmedHash.toLowerCase().startsWith('cert-')
+      const isBlockchainHash = trimmedHash.toUpperCase().startsWith('HCERT-')
+      
       const res = await fetch('/api/certificates/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          hash: trimmedHash.startsWith('HCERT-') ? trimmedHash : undefined,
-          certificateId: trimmedHash.startsWith('cert-') ? trimmedHash : undefined,
+          // If it's a certificate ID, send as certificateId
+          // If it's a blockchain hash, send as hash  
+          // Otherwise, try as hash (the API will search by both)
+          hash: isCertificateId ? undefined : trimmedHash,
+          certificateId: isCertificateId ? trimmedHash : undefined,
         }),
       })
 

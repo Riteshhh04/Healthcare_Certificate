@@ -27,6 +27,11 @@ export async function POST(request: NextRequest) {
     // Then try to find by blockchain hash
     else if (hash) {
       certificate = certificateStore.getByHash(hash)
+      
+      // If not found by hash, also try as certificate ID (in case user entered wrong format)
+      if (!certificate && hash.includes('-')) {
+        certificate = certificateStore.getById(hash)
+      }
     }
 
     // If no certificate found in database, return not found
