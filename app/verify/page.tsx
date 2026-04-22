@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Shield,
   CheckCircle,
@@ -16,6 +18,8 @@ import {
   Upload,
   AlertTriangle,
   FileWarning,
+  Search,
+  Hash,
 } from 'lucide-react'
 
 interface PDFVerificationResult {
@@ -43,6 +47,28 @@ interface PDFVerificationResult {
   details: string[]
 }
 
+interface HashVerificationResult {
+  isValid: boolean
+  certificate?: {
+    id: string
+    patientName: string
+    certificateType: string
+    issuedBy: string
+    issueDate: string
+    expiryDate?: string
+    description: string
+    status: string
+  }
+  blockchain?: {
+    hash: string
+    transactionId?: string
+    blockNumber?: number
+    timestamp?: string
+  }
+  message: string
+  error?: string
+}
+
 function VerifyPageContent() {
   // PDF verification state
   const [pdfFile, setPdfFile] = useState<File | null>(null)
@@ -50,6 +76,12 @@ function VerifyPageContent() {
   const [pdfResult, setPdfResult] = useState<PDFVerificationResult | null>(null)
   const [pdfError, setPdfError] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+
+  // Hash verification state
+  const [hashInput, setHashInput] = useState('')
+  const [isHashVerifying, setIsHashVerifying] = useState(false)
+  const [hashResult, setHashResult] = useState<HashVerificationResult | null>(null)
+  const [hashError, setHashError] = useState('')
 
   const handlePdfVerify = async () => {
     if (!pdfFile) {
@@ -76,6 +108,36 @@ function VerifyPageContent() {
       setPdfError('PDF verification failed. Please try again.')
     } finally {
       setIsPdfVerifying(false)
+    }
+  }
+
+  const handleHashVerify = async () => {
+    const trimmedHash = hashInput.trim()
+    if (!trimmedHash) {
+      setHashError('Please enter a certificate hash or ID')
+      return
+    }
+
+    setHashError('')
+    setHashResult(null)
+    setIsHashVerifying(true)
+
+    try {
+      const res = await fetch('/api/certificates/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          hash: trimmedHash.startsWith('HCERT-') ? trimmedHash : undefined,
+          certificateId: trimmedHash.startsWith('cert-') ? trimmedHash : undefined,
+        }),
+      })
+
+      const data = await res.json()
+      setHashResult(data)
+    } catch {
+      setHashError('Hash verification failed. Please try again.')
+    } finally {
+      setIsHashVerifying(false)
     }
   }
 
@@ -140,327 +202,526 @@ function VerifyPageContent() {
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-foreground mb-2">Verify Health Certificate</h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            Upload a certificate PDF to verify its authenticity and detect any tampering.
+            Upload a certificate PDF or enter a blockchain hash to verify authenticity.
           </p>
         </div>
 
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5 text-primary" />
-              PDF Document Verification
-            </CardTitle>
-            <CardDescription>
-              Upload a certificate PDF to verify its authenticity and detect any tampering
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                isDragging
-                  ? 'border-primary bg-primary/5'
-                  : pdfFile
-                  ? 'border-success bg-success/5'
-                  : 'border-muted-foreground/25 hover:border-primary/50'
-              }`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              {pdfFile ? (
-                <div className="space-y-3">
-                  <FileText className="h-12 w-12 text-success mx-auto" />
-                  <div>
-                    <p className="font-medium text-foreground">{pdfFile.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {(pdfFile.size / 1024).toFixed(1)} KB
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setPdfFile(null)
-                      setPdfResult(null)
-                    }}
-                  >
-                    Remove
-                  </Button>
+        <Tabs defaultValue="upload" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsTrigger value="upload" className="flex items-center gap-2">
+              <Upload className="h-4 w-4" />
+              Upload PDF
+            </TabsTrigger>
+            <TabsTrigger value="hash" className="flex items-center gap-2">
+              <Hash className="h-4 w-4" />
+              Verify by Hash
+            </TabsTrigger>
+          </TabsList>
+
+          {/* PDF Upload Tab */}
+          <TabsContent value="upload">
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Upload className="h-5 w-5 text-primary" />
+                  PDF Document Verification
+                </CardTitle>
+                <CardDescription>
+                  Upload a certificate PDF to verify its authenticity and detect any tampering
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div
+                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                    isDragging
+                      ? 'border-primary bg-primary/5'
+                      : pdfFile
+                      ? 'border-success bg-success/5'
+                      : 'border-muted-foreground/25 hover:border-primary/50'
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  {pdfFile ? (
+                    <div className="space-y-3">
+                      <FileText className="h-12 w-12 text-success mx-auto" />
+                      <div>
+                        <p className="font-medium text-foreground">{pdfFile.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {(pdfFile.size / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setPdfFile(null)
+                          setPdfResult(null)
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <Upload className="h-12 w-12 text-muted-foreground mx-auto" />
+                      <div>
+                        <p className="font-medium text-foreground">
+                          Drop your certificate PDF here
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          or click to browse
+                        </p>
+                      </div>
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        onChange={handleFileChange}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                      />
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <Upload className="h-12 w-12 text-muted-foreground mx-auto" />
-                  <div>
-                    <p className="font-medium text-foreground">
-                      Drop your certificate PDF here
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      or click to browse
-                    </p>
-                  </div>
+
+                <div className="relative">
                   <input
                     type="file"
                     accept="application/pdf"
                     onChange={handleFileChange}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                    className="hidden"
+                    id="pdf-upload"
                   />
+                  {!pdfFile && (
+                    <label
+                      htmlFor="pdf-upload"
+                      className="block mt-4 text-center cursor-pointer"
+                    >
+                      <Button variant="outline" asChild>
+                        <span>
+                          <FileText className="h-4 w-4 mr-2" />
+                          Browse Files
+                        </span>
+                      </Button>
+                    </label>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="relative">
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={handleFileChange}
-                className="hidden"
-                id="pdf-upload"
-              />
-              {!pdfFile && (
-                <label
-                  htmlFor="pdf-upload"
-                  className="block mt-4 text-center cursor-pointer"
-                >
-                  <Button variant="outline" asChild>
-                    <span>
-                      <FileText className="h-4 w-4 mr-2" />
-                      Browse Files
-                    </span>
-                  </Button>
-                </label>
-              )}
-            </div>
-
-            {pdfError && (
-              <Alert variant="destructive" className="mt-4">
-                <XCircle className="h-4 w-4" />
-                <AlertDescription>{pdfError}</AlertDescription>
-              </Alert>
-            )}
-
-            {pdfFile && (
-              <Button
-                onClick={handlePdfVerify}
-                disabled={isPdfVerifying}
-                className="w-full mt-4"
-                size="lg"
-              >
-                {isPdfVerifying ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Analyzing PDF...
-                  </>
-                ) : (
-                  <>
-                    <Shield className="h-4 w-4 mr-2" />
-                    Verify Certificate
-                  </>
+                {pdfError && (
+                  <Alert variant="destructive" className="mt-4">
+                    <XCircle className="h-4 w-4" />
+                    <AlertDescription>{pdfError}</AlertDescription>
+                  </Alert>
                 )}
-              </Button>
-            )}
 
-            <div className="mt-4 p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                <strong>How it works:</strong>
-              </p>
-              <ul className="text-xs text-muted-foreground mt-2 space-y-1 list-disc list-inside">
-                <li>Upload a certificate PDF generated by HealthCert</li>
-                <li>System extracts embedded verification data</li>
-                <li>Compares against original certificate records</li>
-                <li>Detects any modifications or tampering</li>
-              </ul>
-            </div>
-
-            {/* Testing Guide */}
-            <div className="mt-6 p-5 border border-primary/20 bg-primary/5 rounded-lg">
-              <h4 className="font-semibold text-foreground flex items-center gap-2 mb-3">
-                <Shield className="h-4 w-4 text-primary" />
-                How to Test Certificate Verification
-              </h4>
-              <div className="space-y-4 text-sm">
-                <div className="p-3 bg-success/10 border border-success/20 rounded-md">
-                  <p className="font-medium text-success mb-2">Test AUTHENTIC Certificate:</p>
-                  <ol className="text-muted-foreground text-xs space-y-1 list-decimal list-inside">
-                    <li>Login as admin: <code className="bg-muted px-1 rounded">admin@healthcare.com</code> / <code className="bg-muted px-1 rounded">admin123</code></li>
-                    <li>Go to Admin Dashboard and generate a certificate for a patient</li>
-                    <li>Download the certificate PDF</li>
-                    <li>Upload the PDF here - it will show <Badge className="bg-success text-success-foreground text-xs ml-1">AUTHENTIC</Badge></li>
-                  </ol>
-                </div>
-                
-                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
-                  <p className="font-medium text-destructive mb-2">Test FAKE/TAMPERED Certificate:</p>
-                  <ol className="text-muted-foreground text-xs space-y-1 list-decimal list-inside">
-                    <li>Download a certificate PDF as above</li>
-                    <li>Open the PDF in an editor (Adobe Acrobat, PDF-XChange, etc.)</li>
-                    <li>Modify any text (change name, date, hospital, etc.)</li>
-                    <li>Save the modified PDF</li>
-                    <li>Upload here - it will show <Badge variant="destructive" className="text-xs ml-1">FAKE / TAMPERED</Badge></li>
-                  </ol>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {pdfResult && (
-          <Card
-            className={
-              pdfResult.isValid
-                ? 'border-success bg-success/5'
-                : pdfResult.isTampered
-                ? 'border-destructive bg-destructive/5'
-                : 'border-warning bg-warning/5'
-            }
-          >
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                {pdfResult.isValid ? (
-                  <div className="p-3 bg-success/10 rounded-full">
-                    <CheckCircle className="h-8 w-8 text-success" />
-                  </div>
-                ) : pdfResult.isTampered ? (
-                  <div className="p-3 bg-destructive/10 rounded-full">
-                    <FileWarning className="h-8 w-8 text-destructive" />
-                  </div>
-                ) : (
-                  <div className="p-3 bg-warning/10 rounded-full">
-                    <AlertTriangle className="h-8 w-8 text-warning" />
-                  </div>
-                )}
-                <div>
-                  <CardTitle
-                    className={
-                      pdfResult.isValid
-                        ? 'text-success'
-                        : pdfResult.isTampered
-                        ? 'text-destructive'
-                        : 'text-warning'
-                    }
+                {pdfFile && (
+                  <Button
+                    onClick={handlePdfVerify}
+                    disabled={isPdfVerifying}
+                    className="w-full mt-4"
+                    size="lg"
                   >
-                    {pdfResult.isValid
-                      ? 'Authentic Certificate'
-                      : pdfResult.isTampered
-                      ? 'Tampered Document Detected'
-                      : 'Verification Issue'}
-                  </CardTitle>
-                  <CardDescription>{pdfResult.message}</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-6">
-              {/* Verification Status Badge */}
-              <div className="flex items-center gap-4 flex-wrap">
-                <Badge
-                  variant={pdfResult.isValid ? 'default' : 'destructive'}
-                  className={
-                    pdfResult.isValid
-                      ? 'bg-success text-success-foreground text-sm px-4 py-1'
-                      : 'text-sm px-4 py-1'
-                  }
-                >
-                  {pdfResult.isValid ? 'AUTHENTIC' : pdfResult.isTampered ? 'FAKE / TAMPERED' : 'UNKNOWN'}
-                </Badge>
-                {pdfResult.isTampered && (
-                  <span className="text-destructive font-medium text-sm">
-                    This document has been modified after generation
-                  </span>
+                    {isPdfVerifying ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Analyzing PDF...
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="h-4 w-4 mr-2" />
+                        Verify Certificate
+                      </>
+                    )}
+                  </Button>
                 )}
-              </div>
 
-              {/* Certificate Details */}
-              {(pdfResult.certificate || pdfResult.originalCertificate) && (
-                <div className="grid md:grid-cols-2 gap-6">
-                  {pdfResult.certificate && (
-                    <div className="space-y-4">
-                      <h3 className="font-semibold text-foreground flex items-center gap-2">
-                        <FileText className="h-5 w-5 text-primary" />
-                        Extracted from PDF
-                      </h3>
-                      <div className="space-y-3 bg-muted p-4 rounded-lg">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Certificate ID</p>
-                          <p className="font-medium text-foreground">{pdfResult.certificate.id}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Patient Name</p>
-                          <p className="font-medium text-foreground">{pdfResult.certificate.patient}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Certificate Type</p>
-                          <p className="font-medium text-foreground">{pdfResult.certificate.type}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Issued By</p>
-                          <p className="font-medium text-foreground">{pdfResult.certificate.issuer}</p>
-                        </div>
+                <div className="mt-4 p-4 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>How it works:</strong>
+                  </p>
+                  <ul className="text-xs text-muted-foreground mt-2 space-y-1 list-disc list-inside">
+                    <li>Upload a certificate PDF generated by HealthCert</li>
+                    <li>System extracts embedded verification data</li>
+                    <li>Compares against original certificate records</li>
+                    <li>Detects any modifications or tampering</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* PDF Verification Result */}
+            {pdfResult && (
+              <Card
+                className={
+                  pdfResult.isValid
+                    ? 'border-success bg-success/5'
+                    : pdfResult.isTampered
+                    ? 'border-destructive bg-destructive/5'
+                    : 'border-warning bg-warning/5'
+                }
+              >
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    {pdfResult.isValid ? (
+                      <div className="p-3 bg-success/10 rounded-full">
+                        <CheckCircle className="h-8 w-8 text-success" />
                       </div>
+                    ) : pdfResult.isTampered ? (
+                      <div className="p-3 bg-destructive/10 rounded-full">
+                        <FileWarning className="h-8 w-8 text-destructive" />
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-warning/10 rounded-full">
+                        <AlertTriangle className="h-8 w-8 text-warning" />
+                      </div>
+                    )}
+                    <div>
+                      <CardTitle
+                        className={
+                          pdfResult.isValid
+                            ? 'text-success'
+                            : pdfResult.isTampered
+                            ? 'text-destructive'
+                            : 'text-warning'
+                        }
+                      >
+                        {pdfResult.isValid
+                          ? 'Authentic Certificate'
+                          : pdfResult.isTampered
+                          ? 'Tampered Document Detected'
+                          : 'Verification Issue'}
+                      </CardTitle>
+                      <CardDescription>{pdfResult.message}</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-6">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <Badge
+                      variant={pdfResult.isValid ? 'default' : 'destructive'}
+                      className={
+                        pdfResult.isValid
+                          ? 'bg-success text-success-foreground text-sm px-4 py-1'
+                          : 'text-sm px-4 py-1'
+                      }
+                    >
+                      {pdfResult.isValid ? 'AUTHENTIC' : pdfResult.isTampered ? 'FAKE / TAMPERED' : 'UNKNOWN'}
+                    </Badge>
+                    {pdfResult.isTampered && (
+                      <span className="text-destructive font-medium text-sm">
+                        This document has been modified after generation
+                      </span>
+                    )}
+                  </div>
+
+                  {(pdfResult.certificate || pdfResult.originalCertificate) && (
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {pdfResult.certificate && (
+                        <div className="space-y-4">
+                          <h3 className="font-semibold text-foreground flex items-center gap-2">
+                            <FileText className="h-5 w-5 text-primary" />
+                            Extracted from PDF
+                          </h3>
+                          <div className="space-y-3 bg-muted p-4 rounded-lg">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Certificate ID</p>
+                              <p className="font-medium text-foreground">{pdfResult.certificate.id}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Patient Name</p>
+                              <p className="font-medium text-foreground">{pdfResult.certificate.patient}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Certificate Type</p>
+                              <p className="font-medium text-foreground">{pdfResult.certificate.type}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Issued By</p>
+                              <p className="font-medium text-foreground">{pdfResult.certificate.issuer}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {pdfResult.originalCertificate && (
+                        <div className="space-y-4">
+                          <h3 className="font-semibold text-foreground flex items-center gap-2">
+                            <Shield className="h-5 w-5 text-primary" />
+                            Original Record
+                          </h3>
+                          <div className="space-y-3 bg-muted p-4 rounded-lg">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Certificate ID</p>
+                              <p className="font-medium text-foreground">{pdfResult.originalCertificate.id}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Patient Name</p>
+                              <p className="font-medium text-foreground">{pdfResult.originalCertificate.patientName}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Certificate Type</p>
+                              <p className="font-medium text-foreground">{pdfResult.originalCertificate.certificateType}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Status</p>
+                              <Badge
+                                variant="default"
+                                className={
+                                  pdfResult.originalCertificate.status === 'verified'
+                                    ? 'bg-success text-success-foreground'
+                                    : ''
+                                }
+                              >
+                                {pdfResult.originalCertificate.status}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {pdfResult.originalCertificate && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-foreground">Verification Log</h3>
+                    <div className="bg-muted p-4 rounded-lg font-mono text-xs space-y-1">
+                      {pdfResult.details.map((detail, index) => (
+                        <p
+                          key={index}
+                          className={
+                            detail.includes('mismatch') || detail.includes('TAMPERED') || detail.includes('Error')
+                              ? 'text-destructive'
+                              : detail.includes('verified') || detail.includes('passed')
+                              ? 'text-success'
+                              : 'text-muted-foreground'
+                          }
+                        >
+                          [{index + 1}] {detail}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* Hash Verification Tab */}
+          <TabsContent value="hash">
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Hash className="h-5 w-5 text-primary" />
+                  Blockchain Hash Verification
+                </CardTitle>
+                <CardDescription>
+                  Enter a certificate ID or blockchain hash to verify against the blockchain
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-2 block">
+                      Certificate ID or Blockchain Hash
+                    </label>
+                    <div className="flex gap-3">
+                      <Input
+                        placeholder="e.g., cert-1234567890-abc123 or HCERT-00000000..."
+                        value={hashInput}
+                        onChange={(e) => {
+                          setHashInput(e.target.value)
+                          setHashError('')
+                          setHashResult(null)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleHashVerify()
+                        }}
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={handleHashVerify}
+                        disabled={isHashVerifying || !hashInput.trim()}
+                      >
+                        {isHashVerifying ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Search className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {hashError && (
+                    <Alert variant="destructive">
+                      <XCircle className="h-4 w-4" />
+                      <AlertDescription>{hashError}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="p-4 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      <strong>How it works:</strong>
+                    </p>
+                    <ul className="text-xs text-muted-foreground mt-2 space-y-1 list-disc list-inside">
+                      <li>Enter the certificate ID (starts with <code className="bg-background px-1 rounded">cert-</code>)</li>
+                      <li>Or enter the blockchain hash (starts with <code className="bg-background px-1 rounded">HCERT-</code>)</li>
+                      <li>System verifies against the blockchain records</li>
+                      <li>Returns certificate details if valid</li>
+                    </ul>
+                  </div>
+
+                  <div className="p-4 border border-primary/20 bg-primary/5 rounded-lg">
+                    <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2">
+                      <Shield className="h-4 w-4 text-primary" />
+                      Where to find the hash?
+                    </h4>
+                    <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                      <li>The certificate ID is shown on the certificate PDF</li>
+                      <li>The blockchain hash is displayed after certificate generation</li>
+                      <li>You can find both in the patient or admin dashboard</li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Hash Verification Result */}
+            {hashResult && (
+              <Card
+                className={
+                  hashResult.isValid
+                    ? 'border-success bg-success/5'
+                    : 'border-destructive bg-destructive/5'
+                }
+              >
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    {hashResult.isValid ? (
+                      <div className="p-3 bg-success/10 rounded-full">
+                        <CheckCircle className="h-8 w-8 text-success" />
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-destructive/10 rounded-full">
+                        <XCircle className="h-8 w-8 text-destructive" />
+                      </div>
+                    )}
+                    <div>
+                      <CardTitle
+                        className={hashResult.isValid ? 'text-success' : 'text-destructive'}
+                      >
+                        {hashResult.isValid ? 'Certificate Verified' : 'Verification Failed'}
+                      </CardTitle>
+                      <CardDescription>{hashResult.message}</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-6">
+                  <div className="flex items-center gap-4">
+                    <Badge
+                      variant={hashResult.isValid ? 'default' : 'destructive'}
+                      className={
+                        hashResult.isValid
+                          ? 'bg-success text-success-foreground text-sm px-4 py-1'
+                          : 'text-sm px-4 py-1'
+                      }
+                    >
+                      {hashResult.isValid ? 'VERIFIED' : 'NOT FOUND'}
+                    </Badge>
+                  </div>
+
+                  {hashResult.certificate && (
                     <div className="space-y-4">
                       <h3 className="font-semibold text-foreground flex items-center gap-2">
-                        <Shield className="h-5 w-5 text-primary" />
-                        Original Record
+                        <FileText className="h-5 w-5 text-primary" />
+                        Certificate Details
                       </h3>
-                      <div className="space-y-3 bg-muted p-4 rounded-lg">
+                      <div className="grid md:grid-cols-2 gap-4 bg-muted p-4 rounded-lg">
                         <div>
                           <p className="text-sm text-muted-foreground">Certificate ID</p>
-                          <p className="font-medium text-foreground">{pdfResult.originalCertificate.id}</p>
+                          <p className="font-medium text-foreground">{hashResult.certificate.id}</p>
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Patient Name</p>
-                          <p className="font-medium text-foreground">{pdfResult.originalCertificate.patientName}</p>
+                          <p className="font-medium text-foreground">{hashResult.certificate.patientName}</p>
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Certificate Type</p>
-                          <p className="font-medium text-foreground">{pdfResult.originalCertificate.certificateType}</p>
+                          <p className="font-medium text-foreground">{hashResult.certificate.certificateType}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Issued By</p>
+                          <p className="font-medium text-foreground">{hashResult.certificate.issuedBy}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Issue Date</p>
+                          <p className="font-medium text-foreground">{hashResult.certificate.issueDate}</p>
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Status</p>
                           <Badge
                             variant="default"
                             className={
-                              pdfResult.originalCertificate.status === 'verified'
+                              hashResult.certificate.status === 'verified'
                                 ? 'bg-success text-success-foreground'
                                 : ''
                             }
                           >
-                            {pdfResult.originalCertificate.status}
+                            {hashResult.certificate.status}
                           </Badge>
+                        </div>
+                        {hashResult.certificate.expiryDate && (
+                          <div>
+                            <p className="text-sm text-muted-foreground">Expiry Date</p>
+                            <p className="font-medium text-foreground">{hashResult.certificate.expiryDate}</p>
+                          </div>
+                        )}
+                        <div className="md:col-span-2">
+                          <p className="text-sm text-muted-foreground">Description</p>
+                          <p className="font-medium text-foreground">{hashResult.certificate.description}</p>
                         </div>
                       </div>
                     </div>
                   )}
-                </div>
-              )}
 
-              {/* Verification Details */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-foreground">Verification Log</h3>
-                <div className="bg-muted p-4 rounded-lg font-mono text-xs space-y-1">
-                  {pdfResult.details.map((detail, index) => (
-                    <p
-                      key={index}
-                      className={
-                        detail.includes('mismatch') || detail.includes('TAMPERED') || detail.includes('Error')
-                          ? 'text-destructive'
-                          : detail.includes('verified') || detail.includes('passed')
-                          ? 'text-success'
-                          : 'text-muted-foreground'
-                      }
-                    >
-                      [{index + 1}] {detail}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                  {hashResult.blockchain && (
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-foreground flex items-center gap-2">
+                        <Shield className="h-5 w-5 text-primary" />
+                        Blockchain Record
+                      </h3>
+                      <div className="bg-muted p-4 rounded-lg space-y-3">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Blockchain Hash</p>
+                          <p className="font-mono text-xs text-foreground break-all">{hashResult.blockchain.hash}</p>
+                        </div>
+                        {hashResult.blockchain.transactionId && (
+                          <div>
+                            <p className="text-sm text-muted-foreground">Transaction ID</p>
+                            <p className="font-mono text-xs text-foreground">{hashResult.blockchain.transactionId}</p>
+                          </div>
+                        )}
+                        {hashResult.blockchain.blockNumber && (
+                          <div>
+                            <p className="text-sm text-muted-foreground">Block Number</p>
+                            <p className="font-medium text-foreground">{hashResult.blockchain.blockNumber}</p>
+                          </div>
+                        )}
+                        {hashResult.blockchain.timestamp && (
+                          <div>
+                            <p className="text-sm text-muted-foreground">Timestamp</p>
+                            <p className="font-medium text-foreground">{hashResult.blockchain.timestamp}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
 
         <div className="mt-12 text-center">
           <p className="text-sm text-muted-foreground">
