@@ -1,320 +1,236 @@
 /**
- * SQLite Database Implementation for Local Development
+ * In-Memory Database Implementation
  * 
- * To use this instead of in-memory storage:
- * 1. Install better-sqlite3: npm install better-sqlite3 @types/better-sqlite3
- * 2. Rename this file to db.ts (backup the original first)
- * 3. Run: npm run dev
+ * This is a simple in-memory store for development purposes.
+ * For production with SQLite, install better-sqlite3 and rename db-sqlite.ts to db.ts
  * 
- * The database file (healthcare.db) will be created automatically in the project root.
+ * Note: Data will be reset when the server restarts.
  */
 
-import Database from 'better-sqlite3'
-import path from 'path'
 import { User, Certificate } from './types'
 
-// Database file will be stored in the project root
-const dbPath = path.join(process.cwd(), 'healthcare.db')
+// In-memory stores
+const users: Map<string, User> = new Map()
+const certificates: Map<string, Certificate> = new Map()
+const verificationTokens: Map<string, string> = new Map() // token -> userId
 
-// Create database connection (lazy initialization)
-let db: Database.Database | null = null
-
-function getDb(): Database.Database {
-  if (!db) {
-    db = new Database(dbPath)
-    db.pragma('journal_mode = WAL') // Better performance for concurrent reads
-    initializeDatabase()
-  }
-  return db
+// Initialize with admin user
+const adminUser: User = {
+  id: 'admin-001',
+  email: 'admin@healthcare.com',
+  name: 'System Administrator',
+  password: 'admin123', // In production, this would be hashed
+  role: 'admin',
+  isVerified: true,
+  createdAt: new Date(),
 }
+users.set(adminUser.id, adminUser)
 
-// Initialize database tables
-function initializeDatabase() {
-  const database = db!
-  
-  // Create users table
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT NOT NULL,
-      password TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('patient', 'admin')),
-      is_verified INTEGER NOT NULL DEFAULT 0,
-      verification_token TEXT,
-      created_at TEXT NOT NULL
-    )
-  `)
+// Sample patients for demo
+const samplePatients: User[] = [
+  {
+    id: 'patient-001',
+    email: 'john.doe@email.com',
+    name: 'John Doe',
+    password: 'password123',
+    role: 'patient',
+    isVerified: true,
+    createdAt: new Date('2024-01-15'),
+  },
+  {
+    id: 'patient-002',
+    email: 'jane.smith@email.com',
+    name: 'Jane Smith',
+    password: 'password123',
+    role: 'patient',
+    isVerified: true,
+    createdAt: new Date('2024-02-20'),
+  },
+  {
+    id: 'patient-003',
+    email: 'mike.johnson@email.com',
+    name: 'Mike Johnson',
+    password: 'password123',
+    role: 'patient',
+    isVerified: false,
+    createdAt: new Date('2024-03-10'),
+  },
+]
 
-  // Create certificates table
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS certificates (
-      id TEXT PRIMARY KEY,
-      patient_id TEXT NOT NULL,
-      patient_name TEXT NOT NULL,
-      patient_email TEXT NOT NULL,
-      certificate_type TEXT NOT NULL,
-      issued_by TEXT NOT NULL,
-      issue_date TEXT NOT NULL,
-      expiry_date TEXT,
-      description TEXT NOT NULL,
-      file_url TEXT,
-      blockchain_hash TEXT,
-      transaction_id TEXT,
-      status TEXT NOT NULL CHECK (status IN ('pending', 'verified', 'revoked')),
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (patient_id) REFERENCES users(id)
-    )
-  `)
+samplePatients.forEach((p) => users.set(p.id, p))
 
-  // Create verification tokens table
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS verification_tokens (
-      token TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-  `)
+// Sample certificates with diverse types for testing
+const sampleCertificates: Certificate[] = [
+  {
+    id: 'cert-001',
+    patientId: 'patient-001',
+    patientName: 'John Doe',
+    patientEmail: 'john.doe@email.com',
+    certificateType: 'COVID-19 Vaccination',
+    issuedBy: 'City General Hospital',
+    issueDate: new Date('2024-01-20'),
+    description: 'Full vaccination course completed - Pfizer-BioNTech. Two doses administered as per WHO guidelines.',
+    blockchainHash: '0x7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
+    transactionId: '0xabc123def456789abc123def456789abc123def456789',
+    status: 'verified',
+    createdAt: new Date('2024-01-20'),
+  },
+  {
+    id: 'cert-002',
+    patientId: 'patient-001',
+    patientName: 'John Doe',
+    patientEmail: 'john.doe@email.com',
+    certificateType: 'Medical Fitness Certificate',
+    issuedBy: 'HealthCare Plus Clinic',
+    issueDate: new Date('2024-02-15'),
+    expiryDate: new Date('2025-02-15'),
+    description: 'Annual medical fitness examination - All parameters normal. Fit for employment and travel purposes.',
+    blockchainHash: '0x2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae',
+    transactionId: '0xdef789ghi012345def789ghi012345def789ghi012345',
+    status: 'verified',
+    createdAt: new Date('2024-02-15'),
+  },
+  {
+    id: 'cert-003',
+    patientId: 'patient-002',
+    patientName: 'Jane Smith',
+    patientEmail: 'jane.smith@email.com',
+    certificateType: 'Blood Donation Certificate',
+    issuedBy: 'Red Cross Blood Bank',
+    issueDate: new Date('2024-03-01'),
+    description: 'Voluntary blood donation - Type O+. 450ml whole blood collected successfully.',
+    blockchainHash: '0x3fdba35f04dc8c462986c992bcf875546257113072a909c162f7e470e581e278',
+    transactionId: '0xghi345jkl678901ghi345jkl678901ghi345jkl678901',
+    status: 'verified',
+    createdAt: new Date('2024-03-01'),
+  },
+  {
+    id: 'cert-004',
+    patientId: 'patient-001',
+    patientName: 'John Doe',
+    patientEmail: 'john.doe@email.com',
+    certificateType: 'Hepatitis B Vaccination',
+    issuedBy: 'Metro Health Center',
+    issueDate: new Date('2024-04-10'),
+    description: 'Hepatitis B vaccination series completed. Three-dose regimen administered over 6 months.',
+    blockchainHash: '0x4a5c6d7e8f90a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6',
+    transactionId: '0xjkl901mno234567jkl901mno234567jkl901mno234567',
+    status: 'verified',
+    createdAt: new Date('2024-04-10'),
+  },
+  {
+    id: 'cert-005',
+    patientId: 'patient-002',
+    patientName: 'Jane Smith',
+    patientEmail: 'jane.smith@email.com',
+    certificateType: 'Allergy Test Report',
+    issuedBy: 'Allergy & Immunology Specialists',
+    issueDate: new Date('2024-05-22'),
+    expiryDate: new Date('2026-05-22'),
+    description: 'Comprehensive allergy panel test completed. Identified allergies: Peanuts, Dust Mites. No drug allergies detected.',
+    blockchainHash: '0x5b6c7d8e9f01a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7',
+    transactionId: '0xmno567pqr890123mno567pqr890123mno567pqr890123',
+    status: 'verified',
+    createdAt: new Date('2024-05-22'),
+  },
+  {
+    id: 'cert-006',
+    patientId: 'patient-003',
+    patientName: 'Mike Johnson',
+    patientEmail: 'mike.johnson@email.com',
+    certificateType: 'Eye Examination Certificate',
+    issuedBy: 'Vision Care Eye Hospital',
+    issueDate: new Date('2024-06-15'),
+    expiryDate: new Date('2025-06-15'),
+    description: 'Complete eye examination performed. Visual acuity: 20/20 both eyes. No signs of glaucoma or cataracts.',
+    blockchainHash: '0x6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7',
+    transactionId: '0xpqr123stu456789pqr123stu456789pqr123stu456789',
+    status: 'verified',
+    createdAt: new Date('2024-06-15'),
+  },
+  {
+    id: 'cert-007',
+    patientId: 'patient-001',
+    patientName: 'John Doe',
+    patientEmail: 'john.doe@email.com',
+    certificateType: 'Mental Health Assessment',
+    issuedBy: 'MindCare Psychiatric Center',
+    issueDate: new Date('2024-07-08'),
+    description: 'Psychological evaluation completed. No signs of depression or anxiety disorders. Mentally fit for work.',
+    blockchainHash: '0x7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8',
+    transactionId: '0xstu789vwx012345stu789vwx012345stu789vwx012345',
+    status: 'verified',
+    createdAt: new Date('2024-07-08'),
+  },
+  {
+    id: 'cert-008',
+    patientId: 'patient-002',
+    patientName: 'Jane Smith',
+    patientEmail: 'jane.smith@email.com',
+    certificateType: 'Dental Clearance Certificate',
+    issuedBy: 'SmileCare Dental Clinic',
+    issueDate: new Date('2024-08-20'),
+    description: 'Complete dental examination and cleaning performed. No cavities or gum disease detected. Oral hygiene: Excellent.',
+    blockchainHash: '0x8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9',
+    transactionId: '0xvwx345yza678901vwx345yza678901vwx345yza678901',
+    status: 'verified',
+    createdAt: new Date('2024-08-20'),
+  },
+]
 
-  // Create indexes for better query performance
-  database.exec(`
-    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-    CREATE INDEX IF NOT EXISTS idx_certificates_patient_id ON certificates(patient_id);
-    CREATE INDEX IF NOT EXISTS idx_certificates_blockchain_hash ON certificates(blockchain_hash);
-  `)
-
-  // Insert default admin user if not exists
-  const adminExists = database.prepare('SELECT id FROM users WHERE email = ?').get('admin@healthcare.com')
-  if (!adminExists) {
-    database.prepare(`
-      INSERT INTO users (id, email, name, password, role, is_verified, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      'admin-001',
-      'admin@healthcare.com',
-      'System Administrator',
-      'admin123',
-      'admin',
-      1,
-      new Date().toISOString()
-    )
-  }
-}
-
-// Helper functions to convert between DB and TypeScript types
-function rowToUser(row: Record<string, unknown>): User {
-  return {
-    id: row.id as string,
-    email: row.email as string,
-    name: row.name as string,
-    password: row.password as string,
-    role: row.role as 'patient' | 'admin',
-    isVerified: Boolean(row.is_verified),
-    verificationToken: row.verification_token as string | undefined,
-    createdAt: new Date(row.created_at as string),
-  }
-}
-
-function rowToCertificate(row: Record<string, unknown>): Certificate {
-  return {
-    id: row.id as string,
-    patientId: row.patient_id as string,
-    patientName: row.patient_name as string,
-    patientEmail: row.patient_email as string,
-    certificateType: row.certificate_type as string,
-    issuedBy: row.issued_by as string,
-    issueDate: new Date(row.issue_date as string),
-    expiryDate: row.expiry_date ? new Date(row.expiry_date as string) : undefined,
-    description: row.description as string,
-    fileUrl: row.file_url as string | undefined,
-    blockchainHash: row.blockchain_hash as string | undefined,
-    transactionId: row.transaction_id as string | undefined,
-    status: row.status as 'pending' | 'verified' | 'revoked',
-    createdAt: new Date(row.created_at as string),
-  }
-}
+sampleCertificates.forEach((c) => certificates.set(c.id, c))
 
 // User operations
 export const userStore = {
-  getAll: (): User[] => {
-    const rows = getDb().prepare('SELECT * FROM users').all() as Record<string, unknown>[]
-    return rows.map(rowToUser)
-  },
-
-  getById: (id: string): User | undefined => {
-    const row = getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as Record<string, unknown> | undefined
-    return row ? rowToUser(row) : undefined
-  },
-
-  getByEmail: (email: string): User | undefined => {
-    const row = getDb().prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(email) as Record<string, unknown> | undefined
-    return row ? rowToUser(row) : undefined
-  },
-
+  getAll: (): User[] => Array.from(users.values()),
+  getById: (id: string): User | undefined => users.get(id),
+  getByEmail: (email: string): User | undefined => 
+    Array.from(users.values()).find((u) => u.email.toLowerCase() === email.toLowerCase()),
   create: (user: User): User => {
-    getDb().prepare(`
-      INSERT INTO users (id, email, name, password, role, is_verified, verification_token, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      user.id,
-      user.email,
-      user.name,
-      user.password,
-      user.role,
-      user.isVerified ? 1 : 0,
-      user.verificationToken || null,
-      user.createdAt.toISOString()
-    )
+    users.set(user.id, user)
     return user
   },
-
   update: (id: string, updates: Partial<User>): User | undefined => {
-    const existing = userStore.getById(id)
-    if (!existing) return undefined
-
-    const updated = { ...existing, ...updates }
-    getDb().prepare(`
-      UPDATE users SET
-        email = ?,
-        name = ?,
-        password = ?,
-        role = ?,
-        is_verified = ?,
-        verification_token = ?
-      WHERE id = ?
-    `).run(
-      updated.email,
-      updated.name,
-      updated.password,
-      updated.role,
-      updated.isVerified ? 1 : 0,
-      updated.verificationToken || null,
-      id
-    )
-    return updated
+    const user = users.get(id)
+    if (user) {
+      const updated = { ...user, ...updates }
+      users.set(id, updated)
+      return updated
+    }
+    return undefined
   },
-
-  delete: (id: string): boolean => {
-    const result = getDb().prepare('DELETE FROM users WHERE id = ?').run(id)
-    return result.changes > 0
-  },
+  delete: (id: string): boolean => users.delete(id),
 }
 
 // Certificate operations
 export const certificateStore = {
-  getAll: (): Certificate[] => {
-    const rows = getDb().prepare('SELECT * FROM certificates ORDER BY created_at DESC').all() as Record<string, unknown>[]
-    return rows.map(rowToCertificate)
-  },
-
-  getById: (id: string): Certificate | undefined => {
-    const row = getDb().prepare('SELECT * FROM certificates WHERE id = ?').get(id) as Record<string, unknown> | undefined
-    return row ? rowToCertificate(row) : undefined
-  },
-
-  getByPatientId: (patientId: string): Certificate[] => {
-    const rows = getDb().prepare('SELECT * FROM certificates WHERE patient_id = ? ORDER BY created_at DESC').all(patientId) as Record<string, unknown>[]
-    return rows.map(rowToCertificate)
-  },
-
-  getByHash: (hash: string): Certificate | undefined => {
-    const row = getDb().prepare('SELECT * FROM certificates WHERE blockchain_hash = ?').get(hash) as Record<string, unknown> | undefined
-    return row ? rowToCertificate(row) : undefined
-  },
-
+  getAll: (): Certificate[] => Array.from(certificates.values()),
+  getById: (id: string): Certificate | undefined => certificates.get(id),
+  getByPatientId: (patientId: string): Certificate[] =>
+    Array.from(certificates.values()).filter((c) => c.patientId === patientId),
+  getByHash: (hash: string): Certificate | undefined =>
+    Array.from(certificates.values()).find((c) => c.blockchainHash === hash),
   create: (certificate: Certificate): Certificate => {
-    getDb().prepare(`
-      INSERT INTO certificates (
-        id, patient_id, patient_name, patient_email, certificate_type, 
-        issued_by, issue_date, expiry_date, description, file_url,
-        blockchain_hash, transaction_id, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      certificate.id,
-      certificate.patientId,
-      certificate.patientName,
-      certificate.patientEmail,
-      certificate.certificateType,
-      certificate.issuedBy,
-      certificate.issueDate.toISOString(),
-      certificate.expiryDate?.toISOString() || null,
-      certificate.description,
-      certificate.fileUrl || null,
-      certificate.blockchainHash || null,
-      certificate.transactionId || null,
-      certificate.status,
-      certificate.createdAt.toISOString()
-    )
+    certificates.set(certificate.id, certificate)
     return certificate
   },
-
   update: (id: string, updates: Partial<Certificate>): Certificate | undefined => {
-    const existing = certificateStore.getById(id)
-    if (!existing) return undefined
-
-    const updated = { ...existing, ...updates }
-    getDb().prepare(`
-      UPDATE certificates SET
-        patient_name = ?,
-        patient_email = ?,
-        certificate_type = ?,
-        issued_by = ?,
-        issue_date = ?,
-        expiry_date = ?,
-        description = ?,
-        file_url = ?,
-        blockchain_hash = ?,
-        transaction_id = ?,
-        status = ?
-      WHERE id = ?
-    `).run(
-      updated.patientName,
-      updated.patientEmail,
-      updated.certificateType,
-      updated.issuedBy,
-      updated.issueDate.toISOString(),
-      updated.expiryDate?.toISOString() || null,
-      updated.description,
-      updated.fileUrl || null,
-      updated.blockchainHash || null,
-      updated.transactionId || null,
-      updated.status,
-      id
-    )
-    return updated
+    const cert = certificates.get(id)
+    if (cert) {
+      const updated = { ...cert, ...updates }
+      certificates.set(id, updated)
+      return updated
+    }
+    return undefined
   },
-
-  delete: (id: string): boolean => {
-    const result = getDb().prepare('DELETE FROM certificates WHERE id = ?').run(id)
-    return result.changes > 0
-  },
+  delete: (id: string): boolean => certificates.delete(id),
 }
 
 // Verification token operations
 export const tokenStore = {
   create: (token: string, userId: string): void => {
-    getDb().prepare(`
-      INSERT OR REPLACE INTO verification_tokens (token, user_id, created_at)
-      VALUES (?, ?, ?)
-    `).run(token, userId, new Date().toISOString())
+    verificationTokens.set(token, userId)
   },
-
-  get: (token: string): string | undefined => {
-    const row = getDb().prepare('SELECT user_id FROM verification_tokens WHERE token = ?').get(token) as { user_id: string } | undefined
-    return row?.user_id
-  },
-
-  delete: (token: string): boolean => {
-    const result = getDb().prepare('DELETE FROM verification_tokens WHERE token = ?').run(token)
-    return result.changes > 0
-  },
-}
-
-// Export a function to close the database (useful for graceful shutdown)
-export function closeDatabase() {
-  if (db) {
-    db.close()
-    db = null
-  }
+  get: (token: string): string | undefined => verificationTokens.get(token),
+  delete: (token: string): boolean => verificationTokens.delete(token),
 }
